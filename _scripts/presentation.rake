@@ -3,12 +3,12 @@
 # Landslide Sunumları için Görevler
 # ------------------------------------------------------------------------------
 
-require 'pathname'
-require 'pythonconfig'
+require 'pathname' #require çağırır
+require 'pythonconfig' #import işlemini yapar 
 require 'yaml'
 
 # Site yapılandırmasında sunumlara ait bölümü al
-CONFIG = Config.fetch('presentation', {})
+CONFIG = Config.fetch('presentation', {}) #ilk argumandaki keye göre  veriyi çek
 
 # Sunum dizini
 PRESENTATION_DIR = CONFIG.fetch('directory', 'p')
@@ -34,13 +34,13 @@ TASKS = {
 }
 
 # Sunum bilgileri
-presentation   = {}
-# Etiket bilgileri
-tag            = {}
+presentation   = {} #presentation sözlüğünü  oluşturduk
+# Etiket bilgileri 
+tag            = {} #tag sözlüğünü oluşturduk
 
 class File
   @@absolute_path_here = Pathname.new(Pathname.pwd)
-  def self.to_herepath(path)
+  def self.to_herepath(path) #statik erişimli metod oluşturduk
     Pathname.new(File.expand_path(path)).relative_path_from(@@absolute_path_here).to_s
   end
   def self.to_filelist(path)
@@ -59,7 +59,7 @@ def png_comment(file, string)
   image.save(file)
 end
 
-def png_optim(file, threshold=40000)
+def png_optim(file, threshold=40000) #png optimize eden bir fonksiyon
   return if File.new(file).size < threshold
   sh "pngnq -f -e .png-nq #{file}"
   out = "#{file}-nq"
@@ -70,12 +70,12 @@ def png_optim(file, threshold=40000)
   png_comment(file, 'raked')
 end
 
-def jpg_optim(file)
+def jpg_optim(file) #jpg leri optimize eden bir fonksiyon 
   sh "jpegoptim -q -m80 #{file}"
   sh "mogrify -comment 'raked' #{file}"
 end
 
-def optim
+def optim #tüm jpg ve png leri optimize eden fonksiyon
   pngs, jpgs = FileList["**/*.png"], FileList["**/*.jpg", "**/*.jpeg"]
 
   # Optimize edilmişleri çıkar.
@@ -85,7 +85,7 @@ def optim
 
   # Boyut düzeltmesi yap.
   (pngs + jpgs).each do |f|
-    w, h = %x{identify -format '%[fx:w] %[fx:h]' #{f}}.split.map { |e| e.to_i }
+    w, h = %x{identify -format '%[fx:w] %[fx:h]' #{f}}.split.map { |e| e.to_i } #resimin özellikleri hakında bilgi verir
     size, i = [w, h].each_with_index.max
     if size > IMAGE_GEOMETRY[i]
       arg = (i > 0 ? 'x' : '') + IMAGE_GEOMETRY[i].to_s
