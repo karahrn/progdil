@@ -1,16 +1,28 @@
+# Encoding: utf-8
+# ------------------------------------------------------------------------------
+# Landslide Sunumları için Görevler
+# ------------------------------------------------------------------------------
 
 require 'pathname'
 require 'pythonconfig'
 require 'yaml'
 
+# Site yapılandırmasında sunumlara ait bölümü al
 CONFIG = Config.fetch('presentation', {})
 
+# Sunum dizini
 PRESENTATION_DIR = CONFIG.fetch('directory', 'p')
+# Öntanımlı landslide yapılandırması
 DEFAULT_CONFFILE = CONFIG.fetch('conffile', '_templates/presentation.cfg')
+# Sunum indeksi
 INDEX_FILE = File.join(PRESENTATION_DIR, 'index.html')
+# İzin verilen en büyük resim boyutları
 IMAGE_GEOMETRY = [ 733, 550 ]
+# Bağımlılıklar için yapılandırmada hangi anahtarlara bakılacak
 DEPEND_KEYS    = %w(source css js)
+# Vara daima bağımlılık verilecek dosya/dizinler
 DEPEND_ALWAYS  = %w(media)
+# Hedef Görevler ve tanımları
 TASKS = {
     :index   => 'sunumları indeksle',
     :build   => 'sunumları oluştur',
@@ -21,7 +33,9 @@ TASKS = {
     :default => 'öntanımlı görev',
 }
 
+# Sunum bilgileri
 presentation   = {}
+# Etiket bilgileri
 tag            = {}
 
 class File
@@ -52,6 +66,7 @@ def png_optim(file, threshold=40000)
   if File.exist?(out)
     $?.success? ? File.rename(out, file) : File.delete(out)
   end
+  # İşlendiğini belirtmek için not düş.
   png_comment(file, 'raked')
 end
 
@@ -63,10 +78,12 @@ end
 def optim
   pngs, jpgs = FileList["**/*.png"], FileList["**/*.jpg", "**/*.jpeg"]
 
+  # Optimize edilmişleri çıkar.
   [pngs, jpgs].each do |a|
     a.reject! { |f| %x{identify -format '%c' #{f}} =~ /[Rr]aked/ }
   end
 
+  # Boyut düzeltmesi yap.
   (pngs + jpgs).each do |f|
     w, h = %x{identify -format '%[fx:w] %[fx:h]' #{f}}.split.map { |e| e.to_i }
     size, i = [w, h].each_with_index.max
@@ -79,6 +96,9 @@ def optim
   pngs.each { |f| png_optim(f) }
   jpgs.each { |f| jpg_optim(f) }
 
+  # Optimize edilmiş resimlerin kullanıldığı slaytları, bu resimler slayta
+  # gömülü olabileceğinden tekrar üretelim.  Nasıl?  Aşağıdaki berbat
+  # numarayla.  Resim'e ilişik bir referans varsa dosyaya dokun.
   (pngs + jpgs).each do |f|
     name = File.basename f
     FileList["*/*.md"].each do |src|
@@ -87,8 +107,10 @@ def optim
   end
 end
 
+# Alt dizinlerde yapılandırma dosyasına mutlak dosya yoluyla erişiyoruz
 default_conffile = File.expand_path(DEFAULT_CONFFILE)
 
+# Sunum bilgilerini üret
 FileList[File.join(PRESENTATION_DIR, "[^_.]*")].each do |dir|
   next unless File.directory?(dir)
   chdir dir do
@@ -124,19 +146,22 @@ FileList[File.join(PRESENTATION_DIR, "[^_.]*")].each do |dir|
     thumbnail = File.to_herepath(base + '.png')
     target = File.to_herepath(basename)
 
+    # bağımlılık verilecek tüm dosyaları listele
     deps = []
     (DEPEND_ALWAYS + landslide.values_at(*DEPEND_KEYS)).compact.each do |v|
       deps += v.split.select { |p| File.exists?(p) }.map { |p| File.to_filelist(p) }.flatten
     end
 
+    # bağımlılık ağacının çalışması için tüm yolları bu dizine göreceli yap
     deps.map! { |e| File.to_herepath(e) }
     deps.delete(target)
     deps.delete(thumbnail)
 
+    # TODO etiketleri işle
     tags = []
 
    presentation[dir] = {
-      :basename  => basename,	# üreteceğimiz sunum dosyasının baz adı
+      :basename  => basename,    # üreteceğimiz sunum dosyasının baz adı
       :conffile  => conffile,	# landslide konfigürasyonu (mutlak dosya yolu)
       :deps      => deps,	# sunum bağımlılıkları
       :directory => dir,	# sunum dizini (tepe dizine göreli)
@@ -149,6 +174,7 @@ FileList[File.join(PRESENTATION_DIR, "[^_.]*")].each do |dir|
   end
 end
 
+# TODO etiket bilgilerini üret
 presentation.each do |k, v|
   v[:tags].each do |t|
     tag[t] ||= []
@@ -156,13 +182,18 @@ presentation.each do |k, v|
   end
 end
 
+# Görev tablosunu hazırla
 tasktab = Hash[*TASKS.map { |k, v| [k, { :desc => v, :tasks => [] }] }.flatten]
 
+# Görevleri dinamik olarak üret
 presentation.each do |presentation, data|
+  # her alt sunum dizini için bir alt görev tanımlıyoruz
   ns = namespace presentation do
+    # sunum dosyaları
     file data[:target] => data[:deps] do |t|
       chdir presentation do
         sh "landslide -i #{data[:conffile]}"
+        # XXX: Slayt bağlamı iOS tarayıcılarında sorun çıkarıyor.  Kirli bir çözüm!
         sh 'sed -i -e "s/^\([[:blank:]]*var hiddenContext = \)false\(;[[:blank:]]*$\)/\1true\2/" presentation.html'
         unless data[:basename] == 'presentation.html'
           mv 'presentation.html', data[:basename]
@@ -170,6 +201,7 @@ presentation.each do |presentation, data|
       end
     end
 
+    # küçük resimler
     file data[:thumbnail] => data[:target] do
       next unless data[:public]
       sh "cutycapt " +
@@ -211,6 +243,7 @@ presentation.each do |presentation, data|
     task :default => :build
   end
 
+  # alt görevleri görev tablosuna işle
   ns.tasks.map(&:to_s).each do |t|
     _, _, name = t.partition(":").map(&:to_sym)
     next unless tasktab[name]
@@ -219,6 +252,7 @@ presentation.each do |presentation, data|
 end
 
 namespace :p do
+  # görev tablosundan yararlanarak üst isim uzayında ilgili görevleri tanımla
   tasktab.each do |name, info|
     desc info[:desc]
     task name => info[:tasks]
